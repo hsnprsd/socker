@@ -1,5 +1,6 @@
 mod cgroup;
 mod container;
+mod network;
 
 use cgroup::Bytes;
 use clap::Parser;
@@ -25,7 +26,8 @@ fn main() {
 
     let args = Args::parse();
 
-    info!("executing {} in a container", args.executable);
+    // setup sigint handler
+    ctrlc::set_handler(|| panic!("SIGINT")).unwrap();
 
     let resource_limits = ResourceLimits {
         memory_limit: args.memory_limit.map(|b| b._bytes),

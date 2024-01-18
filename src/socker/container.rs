@@ -1,6 +1,13 @@
-use std::{ffi::CString, io, os::raw::c_void};
+use std::{
+    ffi::CString,
+    fs, io,
+    os::{fd::AsRawFd, raw::c_void},
+};
 
-use crate::cgroup::CGroup;
+use crate::{
+    cgroup::CGroup,
+    network::{NetNs, VETHPair},
+};
 use libc::{self};
 use log::info;
 
@@ -9,6 +16,8 @@ const STACK_SIZE: usize = 1000_000; // 1MB
 pub struct Container {
     executable: String,
     cgroup: CGroup,
+    netns: NetNs,
+    veth_pair: VETHPair,
 }
 
 pub struct ResourceLimits {
@@ -32,6 +41,12 @@ extern "C" fn cb(arg: *mut c_void) -> i32 {
 
         container.cgroup.write_pid(0).unwrap();
 
+        // setns network
+        let fd = fs::File::open(container.netns.path()).unwrap();
+        libc::setns(fd.as_raw_fd(), libc::CLONE_NEWNET);
+
+        container.veth_pair.setup_peer().unwrap();
+
         let argv = [prog.as_ptr()];
         libc::execv(prog.as_ptr(), argv.as_ptr())
     }
@@ -39,20 +54,39 @@ extern "C" fn cb(arg: *mut c_void) -> i32 {
 
 impl Container {
     pub fn new(executable: String, resource_limits: ResourceLimits) -> Self {
+        let cgroup = CGroup::new(
+            resource_limits.memory_limit,
+            resource_limits.memory_swap_limit,
+        );
+
+        let netns = NetNs::new();
+        let veth_pair = VETHPair::new(
+            String::from("veth0"),
+            String::from("172.21.0.1/16"),
+            None,
+            String::from("veth1"),
+            String::from("172.21.0.2/16"),
+            Some(netns.name()),
+        )
+        .unwrap();
+
         Self {
             executable,
-            cgroup: CGroup::new(
-                resource_limits.memory_limit,
-                resource_limits.memory_swap_limit,
-            ),
+            cgroup,
+            netns,
+            veth_pair,
         }
     }
 
     pub fn execute(mut self) -> Result<ContainerResult, ContainerError> {
+        // create the cgroup
         if let Err(e) = self.cgroup.create() {
             return Err(ContainerError::CGroupCreationFailed(e));
         }
         info!("created cgroup {}", self.cgroup.name());
+
+        // set veth up
+        self.veth_pair.setup().unwrap();
 
         unsafe {
             // stack
@@ -66,7 +100,7 @@ impl Container {
             );
 
             // flags
-            let flags = libc::SIGCHLD | libc::CLONE_NEWNET;
+            let flags = libc::SIGCHLD;
 
             // arg
             let pid = libc::clone(

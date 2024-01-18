@@ -104,6 +104,6 @@ impl Drop for CGroup {
     fn drop(&mut self) {
         let root = path::Path::new(CG_ROOT);
         let _ = fs::remove_dir(root.join(&self.name));
-        info!("removed cgroup {}", self.name);
+        info!("deleted cgroup {}", self.name);
     }
 }
