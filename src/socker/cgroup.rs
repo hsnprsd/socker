@@ -5,6 +5,7 @@ use std::{
 };
 
 use libc::pid_t;
+use log::info;
 
 pub enum Bytes {
     GB,
@@ -57,6 +58,10 @@ impl CGroup {
         }
     }
 
+    pub fn name(&self) -> String {
+        return self.name.clone();
+    }
+
     pub fn create(&self) -> Result<(), io::Error> {
         let root = path::Path::new(CG_ROOT);
         fs::create_dir(root.join(&self.name))?;
@@ -76,15 +81,18 @@ impl CGroup {
         Ok(())
     }
 
-    pub fn remove(self) -> Result<(), io::Error> {
-        let root = path::Path::new(CG_ROOT);
-        fs::remove_dir(root.join(&self.name))
-    }
-
     pub fn write_pid(&self, pid: pid_t) -> Result<(), io::Error> {
         let root = path::Path::new(CG_ROOT);
         fs::File::create(root.join(&self.name).join("cgroup.procs"))
             .expect("could not open cgroup.procs file")
             .write_all(pid.to_string().as_bytes())
+    }
+}
+
+impl Drop for CGroup {
+    fn drop(&mut self) {
+        let root = path::Path::new(CG_ROOT);
+        let _ = fs::remove_dir(root.join(&self.name));
+        info!("removed cgroup {}", self.name);
     }
 }

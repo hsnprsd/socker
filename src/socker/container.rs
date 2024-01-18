@@ -1,14 +1,7 @@
-use std::{
-    ffi::{CStr, CString},
-    io,
-    os::raw::c_void,
-    process::Command,
-    thread::sleep,
-    time::Duration,
-};
+use std::{ffi::CString, io, os::raw::c_void};
 
 use crate::cgroup::CGroup;
-use libc::{self, c_char};
+use libc::{self};
 use log::{debug, info};
 
 const STACK_SIZE: usize = 1000_000; // 1MB
@@ -27,18 +20,20 @@ pub struct ContainerResult {}
 
 #[derive(Debug)]
 pub enum ContainerError {
+    CGroupCreationFailed(io::Error),
     Failed(i32),
     Unknown(String),
 }
 
-struct CBArg {
-    prog: CString,
-}
-
 extern "C" fn cb(arg: *mut c_void) -> i32 {
     unsafe {
-        let arg: CBArg = (arg as *mut CBArg).read();
-        libc::execv(arg.prog.as_ptr(), [arg.prog.as_ptr()].as_ptr())
+        let container: Container = (arg as *mut Container).read();
+        let prog = CString::new(container.executable).unwrap();
+
+        container.cgroup.write_pid(0).unwrap();
+
+        let argv = [prog.as_ptr()];
+        libc::execv(prog.as_ptr(), argv.as_ptr())
     }
 }
 
@@ -53,7 +48,12 @@ impl Container {
         }
     }
 
-    pub fn execute(self) -> Result<ContainerResult, ContainerError> {
+    pub fn execute(mut self) -> Result<ContainerResult, ContainerError> {
+        if let Err(e) = self.cgroup.create() {
+            return Err(ContainerError::CGroupCreationFailed(e));
+        }
+        info!("created cgroup {}", self.cgroup.name());
+
         unsafe {
             // stack
             let stack = libc::mmap(
@@ -69,17 +69,13 @@ impl Container {
             let flags = libc::SIGCHLD;
 
             // arg
-            let mut arg = CBArg {
-                prog: CString::new(self.executable.clone()).unwrap(),
-            };
-
             let pid = libc::clone(
                 cb,
                 stack.byte_add(STACK_SIZE),
                 flags,
-                (&mut arg) as *mut CBArg as *mut c_void,
+                (&mut self) as *mut Self as *mut c_void,
             );
-            debug!("container started with PID {}", pid);
+            info!("container started with PID {}", pid);
 
             // wait for pid
             let mut status: i32 = -1;
