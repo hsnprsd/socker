@@ -4,5 +4,5 @@ fn main() {
     for i in 0..n {
         arr.push(i);
     }
-    println!("{:?}", arr);
+    println!("{}", arr.iter().sum::<u64>());
 }

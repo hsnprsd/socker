@@ -49,13 +49,9 @@ fn random_hex_encoded_string() -> String {
 }
 
 impl CGroup {
-    pub fn new(
-        name: Option<String>,
-        memory_limit: Option<usize>,
-        memory_swap_limit: Option<usize>,
-    ) -> Self {
+    pub fn new(memory_limit: Option<usize>, memory_swap_limit: Option<usize>) -> Self {
         Self {
-            name: name.unwrap_or(random_hex_encoded_string()),
+            name: random_hex_encoded_string(),
             memory_limit: memory_limit,
             memory_swap_limit: memory_swap_limit,
         }
