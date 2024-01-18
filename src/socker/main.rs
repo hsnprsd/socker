@@ -1,53 +1,48 @@
-use std::{
-    fs,
-    io::{Read, Write},
-    path,
-    process::Command,
-    thread::sleep,
-    time::Duration,
-};
+use std::{env, ffi::CString, fs, io, os::fd::AsRawFd};
+
+mod cgroup;
+
+use cgroup::{Bytes, CGroup};
+use libc::{pid_t, waitpid};
+
+unsafe fn execute_in_cgroup(program: String, cgroup: &CGroup) -> Result<pid_t, io::Error> {
+    let pid = libc::fork();
+    if pid != 0 {
+        // parent
+        Ok(pid)
+    } else {
+        cgroup.write_pid(pid).expect("could not move to cgroup");
+        let program_cstr = CString::new(program).unwrap();
+        let stdout = fs::File::create("./log/stdout").expect("could not create stdout");
+        let stderr = fs::File::create("./log/stderr").expect("could not create stderr");
+        libc::dup2(stdout.as_raw_fd(), 1);
+        libc::dup2(stderr.as_raw_fd(), 2);
+        let rc = libc::execv(program_cstr.as_ptr(), [program_cstr.as_ptr()].as_ptr());
+        if rc < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            todo!() // should not happen
+        }
+    }
+}
 
 fn main() {
-    let mut random = fs::File::open("/dev/random").unwrap();
-    let mut buf: [u8; 16] = [0; 16];
-    random.read_exact(&mut buf).unwrap();
+    let mut args = env::args();
+    args.next();
+    let program = args.next().expect("Usage: [program]");
+    println!("program: {}", program);
 
-    let cg = hex::encode(&buf);
+    let cgroup = CGroup::new(None, Some(Bytes::GB * 4), Some(Bytes::GB * 0));
+    cgroup.create().expect("could not create cgroup");
 
-    let cg_root = path::Path::new("/sys/fs/cgroup");
+    unsafe {
+        let child = execute_in_cgroup(program.to_string(), &cgroup)
+            .expect("failed to run program in cgroup");
+        println!("child pid: {}", child);
+        let mut status: i32 = 0;
+        waitpid(child, &mut status, 0);
+        println!("status: {}", status);
 
-    fs::create_dir(cg_root.join(&cg)).unwrap();
-
-    let memory_max: u64 = 4 * 1024 * 1024 * 1024; // 1 GB
-
-    fs::File::create(cg_root.join(&cg).join("memory.max"))
-        .unwrap()
-        .write_all(memory_max.to_string().as_bytes())
-        .unwrap();
-    fs::File::create(cg_root.join(&cg).join("memory.swap.max"))
-        .unwrap()
-        .write_all("max".as_bytes())
-        .unwrap();
-    fs::File::create(cg_root.join(&cg).join("memory.oom.group"))
-        .unwrap()
-        .write_all("1".as_bytes())
-        .unwrap();
-
-    let program = "./target/debug/heavy_mem";
-
-    let result = Command::new("./target/debug/socker_exec")
-        .arg(program)
-        .arg(&cg)
-        .output()
-        .unwrap();
-    print!(
-        "status: {}\nstderr: {}\nstdout: {}\n",
-        result.status,
-        String::from_utf8(result.stderr).unwrap(),
-        String::from_utf8(result.stdout).unwrap()
-    );
-
-    sleep(Duration::from_secs(1));
-
-    fs::remove_dir(cg_root.join(&cg)).unwrap();
+        cgroup.remove().expect("couldnt remove cgroup");
+    }
 }

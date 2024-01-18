@@ -6,15 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hex = "0.4.3"
+hex = "0.4"
+libc = "0.2"
 
 [[bin]]
 name = "socker"
 path = "src/socker/main.rs"
-
-[[bin]]
-name = "socker_exec"
-path = "src/socker_exec/main.rs"
 
 [[bin]]
 name = "heavy_mem"
