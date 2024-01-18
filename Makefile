@@ -4,4 +4,4 @@ build:
 	cargo b --bins
 
 test: build
-	sudo RUST_LOG=debug ./target/debug/socker ./target/debug/heavy_mem
+	sudo RUST_LOG=debug ./target/debug/socker -e ./target/debug/heavy_mem -m 128m

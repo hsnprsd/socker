@@ -7,10 +7,25 @@ use std::{
 use libc::pid_t;
 use log::info;
 
-pub enum Bytes {
-    GB,
-    MB,
-    KB,
+#[derive(Debug, Clone)]
+pub struct Bytes {
+    pub _bytes: usize,
+}
+
+impl From<String> for Bytes {
+    fn from(value: String) -> Self {
+        let mut _value = value.clone();
+        let unit = _value.pop().unwrap();
+        let b: usize = _value.parse().unwrap();
+        Self {
+            _bytes: match unit {
+                'g' => b * 1000_000_000,
+                'm' => b * 1000_000,
+                'k' => b * 1000,
+                _ => todo!(),
+            },
+        }
+    }
 }
 
 impl std::ops::Mul<usize> for Bytes {
@@ -24,11 +39,7 @@ impl std::ops::Mul<usize> for Bytes {
 
 impl Into<usize> for Bytes {
     fn into(self) -> usize {
-        match self {
-            Bytes::GB => 1000_000_000,
-            Bytes::MB => 1000_000,
-            Bytes::KB => 1000,
-        }
+        self._bytes
     }
 }
 

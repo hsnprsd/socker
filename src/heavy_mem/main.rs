@@ -1,4 +1,4 @@
-use std::{process::Command, thread::sleep, time::Duration};
+use std::process::Command;
 
 fn main() {
     let mut proc = Command::new("ip").args(["link"]).spawn().unwrap();
