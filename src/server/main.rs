@@ -11,13 +11,4 @@ fn main() {
         let (mut stream, _) = listener.accept().unwrap();
         stream.write(b"hello world\n").unwrap();
     }
-
-    // sleep(Duration::from_secs(10));
-
-    // let n = 1000_000_000;
-    // let mut arr = vec![];
-    // for i in 0..n {
-    //     arr.push(i);
-    // }
-    // println!("{}", arr.iter().sum::<u64>());
 }

@@ -50,7 +50,6 @@ impl Drop for NetNs {
 
 pub struct VETHPair {
     pub name: String,
-    addr: String,
     netns: Option<String>,
     pub peer_name: String,
     peer_addr: String,
@@ -60,7 +59,6 @@ pub struct VETHPair {
 impl VETHPair {
     pub fn new(
         name: String,
-        addr: String,
         netns: Option<String>,
         peer_name: String,
         peer_addr: String,
@@ -104,7 +102,6 @@ impl VETHPair {
 
         Ok(Self {
             name,
-            addr,
             netns,
             peer_name,
             peer_addr,
@@ -114,10 +111,12 @@ impl VETHPair {
 
     // sets ip addr, set up
     pub fn setup(&self) -> Result<(), io::Error> {
+        // set master socker0
         let output = Command::new("ip")
-            .args(["addr", "add", &self.addr, "dev", &self.name])
+            .args(["link", "set", &self.name, "master", "socker0"])
             .output()?;
         assert!(output.status.success());
+
         let output = Command::new("ip")
             .args(["link", "set", "dev", &self.name, "up"])
             .output()?;

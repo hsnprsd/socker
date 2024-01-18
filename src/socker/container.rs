@@ -88,10 +88,9 @@ impl Container {
 
         let veth_pair = VETHPair::new(
             format!("v-{}", &id),
-            String::from("172.21.0.1/16"),
             None,
             format!("v-p-{}", &id),
-            String::from("172.21.0.2/16"),
+            String::from("10.10.0.2/16"),
             Some(netns.name()),
         )
         .unwrap();

@@ -18,5 +18,9 @@ name = "socker"
 path = "src/socker/main.rs"
 
 [[bin]]
-name = "heavy_mem"
-path = "src/heavy_mem/main.rs"
+name = "client"
+path = "src/client/main.rs"
+
+[[bin]]
+name = "server"
+path = "src/server/main.rs"
