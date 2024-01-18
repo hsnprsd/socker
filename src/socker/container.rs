@@ -2,7 +2,7 @@ use std::{ffi::CString, io, os::raw::c_void};
 
 use crate::cgroup::CGroup;
 use libc::{self};
-use log::{debug, info};
+use log::info;
 
 const STACK_SIZE: usize = 1000_000; // 1MB
 
@@ -66,7 +66,7 @@ impl Container {
             );
 
             // flags
-            let flags = libc::SIGCHLD;
+            let flags = libc::SIGCHLD | libc::CLONE_NEWNET;
 
             // arg
             let pid = libc::clone(
