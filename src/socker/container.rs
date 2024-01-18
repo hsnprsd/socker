@@ -1,6 +1,7 @@
 use std::{
     ffi::CString,
-    fs, io,
+    fs,
+    io::{self, Read},
     os::{fd::AsRawFd, raw::c_void},
 };
 
@@ -14,6 +15,7 @@ use log::info;
 const STACK_SIZE: usize = 1000_000; // 1MB
 
 pub struct Container {
+    name: String,
     executable: String,
     cgroup: CGroup,
     netns: NetNs,
@@ -39,6 +41,17 @@ extern "C" fn cb(arg: *mut c_void) -> i32 {
         let container: Container = (arg as *mut Container).read();
         let prog = CString::new(container.executable).unwrap();
 
+        // let run_dir = path::Path::new("./run/");
+        // let fd = fs::File::create(run_dir.join(&container.name).join("stdout"))
+        //     .unwrap()
+        //     .as_raw_fd();
+        // let rc = libc::dup2(fd, 1);
+
+        // let fd = fs::File::create(run_dir.join(&container.name).join("stderr"))
+        //     .unwrap()
+        //     .as_raw_fd();
+        // let rc = libc::dup2(fd, 2);
+
         container.cgroup.write_pid(0).unwrap();
 
         // setns network
@@ -52,25 +65,39 @@ extern "C" fn cb(arg: *mut c_void) -> i32 {
     }
 }
 
+fn random_hex_encoded_string() -> String {
+    let mut random = fs::File::open("/dev/random").unwrap();
+    let mut buf: [u8; 5] = [0; 5];
+    random.read_exact(&mut buf).unwrap();
+
+    return hex::encode(&buf);
+}
+
 impl Container {
     pub fn new(executable: String, resource_limits: ResourceLimits) -> Self {
+        let id = random_hex_encoded_string();
+        let name = format!("container-{}", id);
+
         let cgroup = CGroup::new(
+            format!("{}.slice", &name),
             resource_limits.memory_limit,
             resource_limits.memory_swap_limit,
         );
 
-        let netns = NetNs::new();
+        let netns = NetNs::new(format!("{}", name));
+
         let veth_pair = VETHPair::new(
-            String::from("veth0"),
+            format!("v-{}", &id),
             String::from("172.21.0.1/16"),
             None,
-            String::from("veth1"),
+            format!("v-p-{}", &id),
             String::from("172.21.0.2/16"),
             Some(netns.name()),
         )
         .unwrap();
 
         Self {
+            name,
             executable,
             cgroup,
             netns,

@@ -1,6 +1,5 @@
 use std::{
-    fs,
-    io::{self, Read},
+    io::{self},
     process::{exit, Command},
 };
 
@@ -11,18 +10,8 @@ pub struct NetNs {
     name: String,
 }
 
-fn random_hex_encoded_string() -> String {
-    let mut random = fs::File::open("/dev/random").unwrap();
-    let mut buf: [u8; 8] = [0; 8];
-    random.read_exact(&mut buf).unwrap();
-
-    return hex::encode(&buf);
-}
-
 impl NetNs {
-    pub fn new() -> Self {
-        let name = random_hex_encoded_string();
-
+    pub fn new(name: String) -> Self {
         let output = Command::new("ip")
             .args(["netns", "add", &name])
             .output()
@@ -80,7 +69,7 @@ impl VETHPair {
         // create veth pair
         let output = Command::new("ip")
             .args([
-                "link", "add", "veth0", "type", "veth", "peer", "name", "veth1",
+                "link", "add", &name, "type", "veth", "peer", "name", &peer_name,
             ])
             .output()?;
         if !output.status.success() {

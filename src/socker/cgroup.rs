@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::{self, Write},
     path::{self},
 };
 
@@ -52,18 +52,14 @@ pub struct CGroup {
     memory_swap_limit: Option<usize>,
 }
 
-fn random_hex_encoded_string() -> String {
-    let mut random = fs::File::open("/dev/random").unwrap();
-    let mut buf: [u8; 16] = [0; 16];
-    random.read_exact(&mut buf).unwrap();
-
-    return hex::encode(&buf);
-}
-
 impl CGroup {
-    pub fn new(memory_limit: Option<usize>, memory_swap_limit: Option<usize>) -> Self {
+    pub fn new(
+        name: String,
+        memory_limit: Option<usize>,
+        memory_swap_limit: Option<usize>,
+    ) -> Self {
         Self {
-            name: random_hex_encoded_string(),
+            name,
             memory_limit: memory_limit,
             memory_swap_limit: memory_swap_limit,
         }
