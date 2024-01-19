@@ -7,42 +7,6 @@ use std::{
 use libc::pid_t;
 use log::info;
 
-#[derive(Debug, Clone)]
-pub struct Bytes {
-    pub _bytes: usize,
-}
-
-impl From<String> for Bytes {
-    fn from(value: String) -> Self {
-        let mut _value = value.clone();
-        let unit = _value.pop().unwrap();
-        let b: usize = _value.parse().unwrap();
-        Self {
-            _bytes: match unit {
-                'g' => b * 1000_000_000,
-                'm' => b * 1000_000,
-                'k' => b * 1000,
-                _ => todo!(),
-            },
-        }
-    }
-}
-
-impl std::ops::Mul<usize> for Bytes {
-    type Output = usize;
-
-    fn mul(self, rhs: usize) -> Self::Output {
-        let bytes: usize = self.into();
-        rhs * bytes
-    }
-}
-
-impl Into<usize> for Bytes {
-    fn into(self) -> usize {
-        self._bytes
-    }
-}
-
 static CG_ROOT: &str = "/sys/fs/cgroup";
 
 #[derive(Debug, Clone)]
@@ -90,8 +54,7 @@ impl CGroup {
 
     pub fn write_pid(&self, pid: pid_t) -> Result<(), io::Error> {
         let root = path::Path::new(CG_ROOT);
-        fs::File::create(root.join(&self.name).join("cgroup.procs"))
-            .expect("could not open cgroup.procs file")
+        fs::File::create(root.join(&self.name).join("cgroup.procs"))?
             .write_all(pid.to_string().as_bytes())
     }
 }

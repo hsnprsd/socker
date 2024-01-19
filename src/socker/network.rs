@@ -1,9 +1,9 @@
 use std::{
     io::{self},
-    process::{exit, Command},
+    process::Command,
 };
 
-use log::{error, info};
+use log::info;
 
 #[derive(Debug, Clone)]
 pub struct NetNs {
@@ -11,14 +11,11 @@ pub struct NetNs {
 }
 
 impl NetNs {
-    pub fn new(name: String) -> Self {
-        let output = Command::new("ip")
-            .args(["netns", "add", &name])
-            .output()
-            .unwrap();
+    pub fn new(name: String) -> io::Result<Self> {
+        let output = Command::new("ip").args(["netns", "add", &name]).output()?;
         assert!(output.status.success());
 
-        Self { name }
+        Ok(Self { name })
     }
 
     pub fn path(&self) -> String {
@@ -32,19 +29,11 @@ impl NetNs {
 
 impl Drop for NetNs {
     fn drop(&mut self) {
-        let r = Command::new("ip")
+        let output = Command::new("ip")
             .args(["netns", "del", &self.name])
             .output()
             .unwrap();
-        if r.status.success() {
-            info!("deleted netns {}", self.name);
-        } else {
-            error!(
-                "could not delete netns {}, err: {}",
-                self.name,
-                String::from_utf8(r.stderr).unwrap(),
-            );
-        }
+        assert!(output.status.success());
     }
 }
 
@@ -63,20 +52,14 @@ impl VETHPair {
         peer_name: String,
         peer_addr: String,
         peer_netns: Option<String>,
-    ) -> Result<Self, io::Error> {
+    ) -> io::Result<Self> {
         // create veth pair
         let output = Command::new("ip")
             .args([
                 "link", "add", &name, "type", "veth", "peer", "name", &peer_name,
             ])
             .output()?;
-        if !output.status.success() {
-            error!(
-                "could not create veth pair, err: {}",
-                String::from_utf8(output.stderr).unwrap()
-            );
-            exit(1);
-        }
+        assert!(output.status.success());
 
         // setns on veth pair
         if let Some(netns) = &netns {
@@ -89,14 +72,6 @@ impl VETHPair {
             let output = Command::new("ip")
                 .args(["link", "set", "dev", &peer_name, "netns", &netns])
                 .output()?;
-            if !output.status.success() {
-                error!(
-                    "could not set netns for veth pair peer {}, err: {}",
-                    &peer_name,
-                    String::from_utf8(output.stderr).unwrap()
-                );
-                exit(1);
-            }
             assert!(output.status.success());
         }
 
@@ -110,7 +85,7 @@ impl VETHPair {
     }
 
     // sets ip addr, set up
-    pub fn setup(&self) -> Result<(), io::Error> {
+    pub fn setup(&self) -> io::Result<()> {
         // set master socker0
         let output = Command::new("ip")
             .args(["link", "set", &self.name, "master", "socker0"])

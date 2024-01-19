@@ -27,30 +27,14 @@ pub struct ResourceLimits {
     pub memory_swap_limit: Option<usize>,
 }
 
-pub struct ContainerResult {}
-
-#[derive(Debug)]
-pub enum ContainerError {
-    CGroupCreationFailed(io::Error),
-    Failed(i32),
-    Unknown(String),
+pub struct ContainerResult {
+    pub status: i32,
 }
 
 extern "C" fn cb(arg: *mut c_void) -> i32 {
     unsafe {
         let container: Container = (arg as *mut Container).read();
         let prog = CString::new(container.executable).unwrap();
-
-        // let run_dir = path::Path::new("./run/");
-        // let fd = fs::File::create(run_dir.join(&container.name).join("stdout"))
-        //     .unwrap()
-        //     .as_raw_fd();
-        // let rc = libc::dup2(fd, 1);
-
-        // let fd = fs::File::create(run_dir.join(&container.name).join("stderr"))
-        //     .unwrap()
-        //     .as_raw_fd();
-        // let rc = libc::dup2(fd, 2);
 
         container.cgroup.write_pid(0).unwrap();
 
@@ -65,17 +49,17 @@ extern "C" fn cb(arg: *mut c_void) -> i32 {
     }
 }
 
-fn random_hex_encoded_string() -> String {
-    let mut random = fs::File::open("/dev/random").unwrap();
+fn random_hex_encoded_string() -> io::Result<String> {
+    let mut random = fs::File::open("/dev/random")?;
     let mut buf: [u8; 5] = [0; 5];
-    random.read_exact(&mut buf).unwrap();
+    random.read_exact(&mut buf)?;
 
-    return hex::encode(&buf);
+    return Ok(hex::encode(&buf));
 }
 
 impl Container {
-    pub fn new(executable: String, resource_limits: ResourceLimits) -> Self {
-        let id = random_hex_encoded_string();
+    pub fn new(executable: String, resource_limits: ResourceLimits) -> io::Result<Self> {
+        let id = random_hex_encoded_string()?;
         let name = format!("container-{}", id);
 
         let cgroup = CGroup::new(
@@ -84,7 +68,7 @@ impl Container {
             resource_limits.memory_swap_limit,
         );
 
-        let netns = NetNs::new(format!("{}", name));
+        let netns = NetNs::new(format!("{}", name))?;
 
         let veth_pair = VETHPair::new(
             format!("v-{}", &id),
@@ -92,27 +76,24 @@ impl Container {
             format!("v-p-{}", &id),
             String::from("10.10.0.2/16"),
             Some(netns.name()),
-        )
-        .unwrap();
+        )?;
 
-        Self {
+        Ok(Self {
             name,
             executable,
             cgroup,
             netns,
             veth_pair,
-        }
+        })
     }
 
-    pub fn execute(mut self) -> Result<ContainerResult, ContainerError> {
+    pub fn execute(mut self) -> io::Result<ContainerResult> {
         // create the cgroup
-        if let Err(e) = self.cgroup.create() {
-            return Err(ContainerError::CGroupCreationFailed(e));
-        }
+        self.cgroup.create()?;
         info!("created cgroup {}", self.cgroup.name());
 
         // set veth up
-        self.veth_pair.setup().unwrap();
+        self.veth_pair.setup()?;
 
         unsafe {
             // stack
@@ -140,17 +121,9 @@ impl Container {
             // wait for pid
             let mut status: i32 = -1;
             info!("waiting for the container to finish...");
-            let pid = libc::waitpid(pid, &mut status, 0);
-            if pid <= 0 {
-                return Err(ContainerError::Unknown(
-                    io::Error::last_os_error().to_string(),
-                ));
-            }
-            if status == 0 {
-                return Ok(ContainerResult {});
-            } else {
-                return Err(ContainerError::Failed(status));
-            }
+            let _ = libc::waitpid(pid, &mut status, 0);
+            // TODO: check pid < 0
+            return Ok(ContainerResult { status });
         }
     }
 }
