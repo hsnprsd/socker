@@ -37,6 +37,7 @@ impl Drop for NetNs {
     }
 }
 
+#[derive(Debug)]
 pub struct VETHPair {
     pub name: String,
     netns: Option<String>,

@@ -26,8 +26,8 @@ fn main() {
     ctrlc::set_handler(|| panic!("SIGINT")).unwrap();
 
     let resource_limits = ResourceLimits {
-        memory_limit: args.memory_limit,
-        memory_swap_limit: args.memory_swap_limit,
+        memory_limit: args.memory_limit.map(|m| m * 1000_000),
+        memory_swap_limit: args.memory_swap_limit.map(|m| m * 1000_000),
     };
     let container = Container::new(args.executable, resource_limits).unwrap();
     let result = container.execute().unwrap();

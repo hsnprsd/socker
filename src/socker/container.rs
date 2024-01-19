@@ -2,18 +2,18 @@ use std::{
     ffi::CString,
     fs,
     io::{self, Read},
-    os::{fd::AsRawFd, raw::c_void},
+    os::fd::AsRawFd,
 };
+
+use libc::{self};
+use log::info;
 
 use crate::{
     cgroup::CGroup,
     network::{NetNs, VETHPair},
 };
-use libc::{self};
-use log::info;
 
-const STACK_SIZE: usize = 1000_000; // 1MB
-
+#[derive(Debug)]
 pub struct Container {
     name: String,
     executable: String,
@@ -29,24 +29,6 @@ pub struct ResourceLimits {
 
 pub struct ContainerResult {
     pub status: i32,
-}
-
-extern "C" fn cb(arg: *mut c_void) -> i32 {
-    unsafe {
-        let container: Container = (arg as *mut Container).read();
-        let prog = CString::new(container.executable).unwrap();
-
-        container.cgroup.write_pid(0).unwrap();
-
-        // setns network
-        let fd = fs::File::open(container.netns.path()).unwrap();
-        libc::setns(fd.as_raw_fd(), libc::CLONE_NEWNET);
-
-        container.veth_pair.setup_peer().unwrap();
-
-        let argv = [prog.as_ptr()];
-        libc::execv(prog.as_ptr(), argv.as_ptr())
-    }
 }
 
 fn random_hex_encoded_string() -> io::Result<String> {
@@ -87,7 +69,7 @@ impl Container {
         })
     }
 
-    pub fn execute(mut self) -> io::Result<ContainerResult> {
+    pub fn execute(self) -> io::Result<ContainerResult> {
         // create the cgroup
         self.cgroup.create()?;
         info!("created cgroup {}", self.cgroup.name());
@@ -95,33 +77,42 @@ impl Container {
         // set veth up
         self.veth_pair.setup()?;
 
+        let pid;
         unsafe {
-            // stack
-            let stack = libc::mmap(
-                std::ptr::null_mut::<c_void>(),
-                STACK_SIZE,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_STACK,
-                -1,
-                0,
-            );
+            pid = libc::fork();
+        }
+        if pid == 0 {
+            let program = CString::new(self.executable)?;
 
-            // flags
-            let flags = libc::SIGCHLD;
+            self.cgroup.write_pid(0)?;
 
-            // arg
-            let pid = libc::clone(
-                cb,
-                stack.byte_add(STACK_SIZE),
-                flags,
-                (&mut self) as *mut Self as *mut c_void,
-            );
+            // setns network
+            let fd = fs::File::open(self.netns.path())?;
+            unsafe {
+                libc::setns(fd.as_raw_fd(), libc::CLONE_NEWNET);
+            }
+
+            self.veth_pair.setup_peer()?;
+
+            let argv = [program.as_ptr(), std::ptr::null()];
+            println!("{:?}", program);
+            println!("{:?}", argv);
+            unsafe {
+                let _ = libc::execv(program.as_ptr(), argv.as_ptr());
+            }
+
+            return Err(io::Error::last_os_error());
+        } else {
             info!("container started with PID {}", pid);
-
             // wait for pid
             let mut status: i32 = -1;
             info!("waiting for the container to finish...");
-            let _ = libc::waitpid(pid, &mut status, 0);
+            unsafe {
+                let rc = libc::waitpid(pid, &mut status, 0);
+                if rc < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
             // TODO: check pid < 0
             return Ok(ContainerResult { status });
         }
